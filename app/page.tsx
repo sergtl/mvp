@@ -1,69 +1,92 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { authClient } from "@/lib/auth-client";
+import { CVUploader } from "./components/cv-upload";
+import { SignInForm } from "./components/sign-in";
+import { SignUpForm } from "./components/sign-up";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FieldError } from "@/components/ui/field";
 
 export default function Home() {
+  const {
+    data: session,
+    isPending,
+    error: sessionError,
+    refetch,
+  } = authClient.useSession();
+  const [isSignUp, setIsSignUp] = useState(false);
+  const queryClient = useQueryClient();
+
+  async function refreshSession() {
+    await refetch();
+  }
+
+  const signOut = useMutation({
+    mutationFn: async () => {
+      const result = await authClient.signOut();
+      if (result.error)
+        throw new Error(result.error.message ?? "Unable to sign out.");
+    },
+    retry: false,
+    onSuccess: async () => {
+      // Do not retain the previous user's cached data after signing out.
+      queryClient.clear();
+      setIsSignUp(false);
+      await refreshSession();
+    },
+  });
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main className="flex flex-1 items-center justify-center px-4 py-16">
+      <div className={session ? "w-full max-w-2xl" : "w-full max-w-sm"}>
+        {isPending ? (
+          <p role="status" className="text-center">
+            Loading your account…
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+        ) : sessionError ? (
+          <div className="space-y-4">
+            <p role="alert">Unable to load your session. Please try again.</p>
+            <Button onClick={() => void refreshSession()}>Try again</Button>
+          </div>
+        ) : session ? (
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Welcome, {session.user.name}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="break-words text-sm text-muted-foreground">
+                  {session.user.email}
+                </p>
+                <Button
+                  disabled={signOut.isPending}
+                  onClick={() => signOut.mutate()}
+                >
+                  {signOut.isPending ? "Signing out…" : "Sign out"}
+                </Button>
+                {signOut.error && (
+                  <FieldError>{signOut.error.message}</FieldError>
+                )}
+              </CardContent>
+            </Card>
+
+            <CVUploader key={session.user.id} userId={session.user.id} />
+          </div>
+        ) : isSignUp ? (
+          <SignUpForm
+            onSignIn={() => setIsSignUp(false)}
+            onSuccess={refreshSession}
+          />
+        ) : (
+          <SignInForm
+            onSignUp={() => setIsSignUp(true)}
+            onSuccess={refreshSession}
+          />
+        )}
+      </div>
+    </main>
   );
 }
