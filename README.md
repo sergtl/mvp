@@ -222,3 +222,57 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+### Greenhouse submission (local MVP)
+
+Install the browser and apply migrations, then start the visible submission worker:
+
+```bash
+pnpm exec playwright install chromium
+pnpm db:migrate
+pnpm worker:submission
+```
+
+Keep `pnpm dev` running separately. The CV worker is only needed for CV parsing.
+Run one submission worker on your local desktop: it opens Chromium on that
+computer, not in the web user's browser. This version is not a remote browser
+service for deployed multi-user applications.
+
+After loading a job, review the answers and attachments, check the review box,
+and click **Apply**. The API checks the live question set, required answers,
+option values and CV ownership, then saves a snapshot plus file bytes in
+`submission` and `submission_file`. Saved CV references resolve to their original
+bytes; manually attached files and generated cover letters are saved too.
+Attachments are limited to 10 MB each and 20 MB total. Later edits on the page do
+not change a queued application.
+
+The worker dispatches rows transactionally into pg-boss and handles one at a time.
+It fills the live Greenhouse controls, uploads the attachments, and clicks Submit
+once. If the site needs CAPTCHA, location selection, a custom/free-form field, or
+other manual help, the app shows **needs input** and leaves the visible browser
+open for five minutes. Finish those fields and submit there; leave the window open
+until the worker sees confirmation. It does not solve or bypass CAPTCHA.
+
+Only a visible confirmation marks a submission as **submitted**. If the browser
+closes, times out, or the worker crashes after starting, the result becomes
+**needs verification**. Check the employer's confirmation/email before taking any
+further action. There are no automatic retries and no retry button for uncertain
+or successful applications. Duplicate Apply requests reuse the saved submission;
+a failure before opening the browser can be retried. Reloading a job restores its
+latest submission status. Inputs remain local drafts; reopening the page does not
+restore the editable answers from a queued snapshot.
+
+Endpoints: authenticated `POST /api/submissions` accepts multipart application
+JSON and files; `GET /api/submissions?url=...` returns only the owner's latest
+status. No Greenhouse API credentials are needed for the browser submission.
+
+Verification (never submits applications to employers):
+
+```bash
+pnpm test:submission       # local synthetic browser form, including PDF upload
+pnpm test:submission-queue # isolated temporary DB, mocked browser and job API
+```
+
+The second test creates and drops its own database using the configured database
+credentials. Production form variations can still require manual completion;
+there has been no live employer submission as part of these tests.

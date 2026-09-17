@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { SubmissionPanel } from "./submission";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ImportedJob, JobField } from "@/lib/jobs/greenhouse";
 import type { AnswerResult } from "@/lib/jobs/answers";
@@ -652,6 +653,7 @@ function JobApplication({ job, userId }: { job: ImportedJob; userId: string }) {
           </p>
         )}
       </form>
+      <SubmissionPanel job={job} userId={userId} answers={answers} freeText={freeText} attachments={attachments} busy={generate.isPending || attach.isPending} />
     </div>
   );
 }

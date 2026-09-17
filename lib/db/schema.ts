@@ -118,3 +118,29 @@ export const cvReview = pgTable("cv_review", {
   data: jsonb("data").$type<ExtractedCV>().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// The row is both the immutable application snapshot and the durable queue.
+export const submission = pgTable("submission", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  sourceURL: text("source_url").notNull(),
+  snapshot: jsonb("snapshot").$type<import("../submissions/types").SubmissionInput>().notNull(),
+  status: text("status").$type<import("../submissions/types").SubmissionStatus>().notNull().default("queued"),
+  message: text("message"),
+  jobId: uuid("job_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, t => [
+  index("submission_user_created_idx").on(t.userId, t.createdAt),
+  uniqueIndex("submission_open_job_idx").on(t.userId, t.sourceURL).where(sql`${t.status} <> 'failed'`),
+  check("submission_status_check", sql`${t.status} IN ('queued', 'processing', 'needs_input', 'submitting', 'submitted', 'failed', 'needs_verification')`),
+]);
+
+export const submissionFile = pgTable("submission_file", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  submissionId: uuid("submission_id").notNull().references(() => submission.id, { onDelete: "cascade" }),
+  fieldId: text("field_id").notNull(),
+  filename: text("filename").notNull(),
+  contentType: text("content_type").notNull(),
+  content: bytea("content").notNull(),
+}, t => [uniqueIndex("submission_file_field_idx").on(t.submissionId, t.fieldId)]);
