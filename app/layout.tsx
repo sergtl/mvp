@@ -3,6 +3,8 @@ import { Geist, Geist_Mono, Oxanium } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import Providers from "./providers";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { Layout } from "@/app/components/layout";
 
 const oxanium = Oxanium({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -34,7 +36,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       )}
     >
       <body className="min-h-full flex flex-col">
-        <Providers>{children}</Providers>
+        <Providers>
+          <TooltipProvider>
+            <Layout>{children}</Layout>
+          </TooltipProvider>
+        </Providers>
       </body>
     </html>
   );
