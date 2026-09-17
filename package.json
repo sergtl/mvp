@@ -18,12 +18,14 @@
     "test:job-answers": "node --import tsx tests/job-answers.test.ts",
     "worker:submission": "tsx workers/submission-worker.ts",
     "test:submission": "node --import tsx tests/submission.test.ts",
-    "test:submission-queue": "node --import tsx tests/submission-queue.test.ts"
+    "test:submission-queue": "node --import tsx tests/submission-queue.test.ts",
+    "test:applications": "node --import tsx tests/applications.test.tsx"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
     "@tanstack/react-query": "^5.103.0",
     "@tanstack/react-query-devtools": "^5.103.0",
+    "@tanstack/react-table": "^9.2.4",
     "better-auth": "^1.7.5",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.3.0",

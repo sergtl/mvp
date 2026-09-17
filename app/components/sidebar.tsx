@@ -26,9 +26,7 @@ import {
 
 import { authClient } from "@/lib/auth-client";
 import {
-  Bell,
   ClipboardList,
-  CreditCard,
   EllipsisVertical,
   FileUser,
   LogOut,

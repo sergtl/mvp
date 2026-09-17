@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import type { ImportedJob } from "@/lib/jobs/greenhouse";
@@ -107,6 +108,9 @@ export function SubmissionPanel({
         <div role="status" className="space-y-1 text-sm">
           <p className="font-medium">{record.status.replaceAll("_", " ")}</p>
           <p>{record.message ?? "Waiting for the submission worker…"}</p>
+          <Link className="inline-block text-sm underline underline-offset-4" href={`/applications/${record.id}`}>
+            View saved application
+          </Link>
         </div>
       )}
       {!locked && (

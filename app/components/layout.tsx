@@ -25,3 +25,5 @@ export function Layout({ children }: LayoutProps) {
     </SidebarProvider>
   );
 }
+
+export default Layout;
