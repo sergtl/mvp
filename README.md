@@ -140,6 +140,54 @@ and remove temporary users and CVs. These tests do not measure model extraction
 accuracy; evaluate that separately against representative CVs before relying on
 unreviewed results.
 
+### Greenhouse job import
+
+After signing in, paste a direct Greenhouse job URL into **Job application** and
+click **Load job**. The app displays the description and editable application,
+location, equal opportunity, demographic, and applicable consent questions.
+File/text alternatives and single/multiple choice fields retain Greenhouse's
+options and required flags. **Check required fields** validates visible answers.
+
+This first version keeps answers and selected files in page memory only; it does
+not save or submit applications. Hidden location coordinates are retained as
+empty fields; geocoding is not implemented. Unsupported field types are visibly
+flagged for completion on the original posting. Custom company career domains
+and shortened links are not supported; use the direct Greenhouse posting URL.
+
+`GET /api/jobs/greenhouse?url=...` requires a session and reads Greenhouse's public
+Job Board API with `questions=true`. It needs no API key, migration, or worker.
+The server only requests fixed Greenhouse API hosts and rejects redirects.
+Descriptions are converted to plain text before rendering.
+
+Run `pnpm test:greenhouse` for offline URL, response normalization, and error tests.
+
+#### Generate application answers
+
+Choose a parsed CV below the job description and click **Generate answers**.
+The authenticated `POST /api/jobs/answers` endpoint loads that user's CV from the
+database, preferring saved review corrections, and calls OpenAI with the job and
+required questions. Optional cover-letter and motivation questions are included.
+It uses the same `OPENAI_API_KEY` and `OPENAI_MODEL` as CV parsing, but runs in the
+web process (up to 60 seconds for the AI request), so the worker is not required.
+
+Drafts fill empty questions only. Dropdown values are checked against the job's
+actual options. Personal decisions, consent, unsupported inputs and questions
+without enough CV information remain for the applicant to answer. Cover letters
+use a text alternative when available; file-only cover letters produce an editable
+`cover-letter.txt` file. Generation also attaches the selected CV's original PDF
+to empty resume file inputs. **Attach selected CV PDF** attaches or replaces the
+resume without calling AI. Existing uploads are preserved during generation.
+The draft holds the actual PDF File and a reference containing its saved CV ID,
+filename, and Greenhouse field name for the future Apply step. Manual file
+replacement clears that saved reference. Downloading the PDF uses the existing
+owner-checked endpoint; a future submission endpoint must check ownership again.
+Answers remain in page memory and are not submitted or persisted. Review generated
+claims and wording: structured output validation cannot guarantee factual accuracy.
+
+`GET /api/jobs/answers` lists only the current user's completed CVs. Use **Refresh
+CVs** after a new CV finishes parsing. Run `pnpm test:job-answers` for offline
+generation, field mapping and edit-preservation tests with a mocked AI transport.
+
 ### Development server
 
 First, run the development server:

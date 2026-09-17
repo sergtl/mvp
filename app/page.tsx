@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
 import { CVUploader } from "./components/cv-upload";
+import { JobImporter } from "./components/job-import";
 import { SignInForm } from "./components/sign-in";
 import { SignUpForm } from "./components/sign-up";
 import { Button } from "@/components/ui/button";
@@ -74,6 +75,7 @@ export default function Home() {
             </Card>
 
             <CVUploader key={session.user.id} userId={session.user.id} />
+            <JobImporter key={`jobs-${session.user.id}`} userId={session.user.id} />
           </div>
         ) : isSignUp ? (
           <SignUpForm
