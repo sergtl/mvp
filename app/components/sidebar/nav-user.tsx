@@ -4,70 +4,19 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-
 import { authClient } from "@/lib/auth-client";
-import {
-  ClipboardList,
-  EllipsisVertical,
-  FileUser,
-  IdCard,
-  LogOut,
-  NotebookPen,
-  Send,
-  UserRound,
-  type LucideIcon,
-} from "lucide-react";
-
-import Link from "next/link";
-import React from "react";
-
-export function NavMain({
-  items,
-}: {
-  items: {
-    title: string;
-    url: string;
-    icon?: LucideIcon | null;
-  }[];
-}) {
-  return (
-    <SidebarGroup>
-      <SidebarGroupContent className="flex flex-col gap-2">
-        <SidebarMenu>
-          {items.map((item) => (
-            <SidebarMenuItem key={item.url}>
-              <SidebarMenuButton asChild tooltip={item.title}>
-                <Link href={item.url}>
-                  {item.icon && <item.icon aria-hidden="true" />}
-                  <span>{item.title}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
-  );
-}
+import { EllipsisVertical, LogOut } from "lucide-react";
 
 export function NavUser({
   user,
@@ -140,48 +89,5 @@ export function NavUser({
         </DropdownMenu>
       </SidebarMenuItem>
     </SidebarMenu>
-  );
-}
-
-const data = [
-  {
-    title: "Apply to a job",
-    url: "/app",
-    icon: Send,
-  },
-  {
-    title: "Applications",
-    url: "/app/applications",
-    icon: ClipboardList,
-  },
-  {
-    title: "My CVs",
-    url: "/app/my-cvs",
-    icon: FileUser,
-  },
-  {
-    title: "Profile",
-    url: "/app/profile",
-    icon: IdCard,
-  },
-  {
-    title: "Saved answers",
-    url: "/app/answers",
-    icon: NotebookPen,
-  },
-];
-
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const { data: session } = authClient.useSession();
-
-  return (
-    <Sidebar variant="inset" {...props}>
-      <SidebarContent>
-        <NavMain items={data} />
-      </SidebarContent>
-      <SidebarFooter>
-        {session?.user && <NavUser user={session?.user} />}
-      </SidebarFooter>
-    </Sidebar>
   );
 }
