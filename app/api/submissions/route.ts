@@ -2,11 +2,8 @@ import { auth } from "@/auth";
 import { saveApprovedAnswers } from "@/lib/answers/memory";
 import { db } from "@/lib/db";
 import { cv, cvFile, submission, submissionFile } from "@/lib/db/schema";
-import {
-  fetchGreenhouseJob,
-  JobImportError,
-  parseGreenhouseURL,
-} from "@/lib/jobs/greenhouse";
+import { JobImportError } from "@/lib/jobs/types";
+import { resolveAts } from "@/lib/jobs/ats-adapter";
 import { submissionInput, type SubmissionFile } from "@/lib/submissions/types";
 import {
   SubmissionError,
@@ -35,9 +32,9 @@ export async function GET(request: Request) {
     );
 
   try {
-    const sourceURL = parseGreenhouseURL(
-      new URL(request.url).searchParams.get("url") ?? "",
-    ).sourceURL;
+    const resolved = resolveAts(new URL(request.url).searchParams.get("url") ?? "");
+    if (!resolved) throw new JobImportError("Enter a supported job posting URL.");
+    const { sourceURL } = resolved;
 
     const [record] = await db
       .select(publicColumns)
@@ -135,7 +132,9 @@ export async function POST(request: Request) {
       throw new SubmissionError("Check the application fields.");
 
     const input = parsed.data;
-    const sourceURL = parseGreenhouseURL(input.job.sourceURL).sourceURL;
+    const resolved = resolveAts(input.job.sourceURL);
+    if (!resolved) throw new JobImportError("Enter a supported job posting URL.");
+    const { adapter, sourceURL } = resolved;
     // Repeated clicks and reloads reuse the original attempt, including uncertain results.
     const existing = await db
       .select(publicColumns)
@@ -152,7 +151,7 @@ export async function POST(request: Request) {
     if (existing[0])
       return Response.json({ submission: existing[0] }, { headers });
 
-    const live = await fetchGreenhouseJob(sourceURL);
+    const live = await adapter.fetchForm(sourceURL);
 
     const files: SubmissionFile[] = [];
 

@@ -3,7 +3,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { answerTargets, type AnswerResult } from "@/lib/jobs/answers";
 import type { Contractors } from "@/lib/jobs/contractors";
-import type { ImportedJob } from "@/lib/jobs/greenhouse";
+import type { ImportedJob } from "@/lib/jobs/types";
 import type { AnswerDraft } from "./use-answer-draft";
 
 type RegenerateResult = {

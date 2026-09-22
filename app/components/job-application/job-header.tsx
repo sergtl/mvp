@@ -1,4 +1,4 @@
-import type { ImportedJob } from "@/lib/jobs/greenhouse";
+import type { ImportedJob } from "@/lib/jobs/types";
 
 export function JobHeader({ job }: { job: ImportedJob }) {
   return (

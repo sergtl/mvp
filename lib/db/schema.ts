@@ -172,3 +172,22 @@ export const submissionFile = pgTable("submission_file", {
   contentType: text("content_type").notNull(),
   content: bytea("content").notNull(),
 }, t => [uniqueIndex("submission_file_field_idx").on(t.submissionId, t.fieldId)]);
+
+// Ashby/Lever need a live browser to read a posting's questions (no public API
+// exposes them). Greenhouse never uses this table: its fetch is instant HTTP.
+export const jobImport = pgTable("job_import", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  ats: text("ats").$type<"ashby" | "lever">().notNull(),
+  sourceURL: text("source_url").notNull(),
+  status: text("status").$type<"queued" | "processing" | "completed" | "failed">().notNull().default("queued"),
+  jobId: uuid("job_id"),
+  result: jsonb("result").$type<import("../jobs/types").ImportedJob>(),
+  errorCode: text("error_code"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+}, t => [
+  index("job_import_user_created_idx").on(t.userId, t.createdAt),
+  check("job_import_ats_check", sql`${t.ats} IN ('ashby', 'lever')`),
+  check("job_import_status_check", sql`${t.status} IN ('queued', 'processing', 'completed', 'failed')`),
+]);

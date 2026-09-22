@@ -1,4 +1,4 @@
-import type { JobField } from "@/lib/jobs/greenhouse";
+import type { JobField } from "@/lib/jobs/types";
 import type { SubmissionInput } from "@/lib/submissions/types";
 
 type SavedFile = { id: string; fieldId: string; filename: string };

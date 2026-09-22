@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { ImportedJob } from "@/lib/jobs/greenhouse";
+import type { ImportedJob } from "@/lib/jobs/types";
 import type { JobRequirements } from "@/lib/jobs/requirements";
 import type { Eligibility } from "@/lib/profile/eligibility";
 

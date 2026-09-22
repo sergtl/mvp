@@ -1,4 +1,4 @@
-import type { ImportedJob } from "../jobs/greenhouse";
+import type { ImportedJob } from "../jobs/types";
 import type { SubmissionInput } from "./types";
 import { isDeepStrictEqual } from "node:util";
 

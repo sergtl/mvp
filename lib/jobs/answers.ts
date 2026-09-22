@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { CONTRACTOR_POLICIES } from "./contractors";
-import type { ImportedJob, JobQuestion } from "./greenhouse";
+import type { ImportedJob, JobQuestion } from "./types";
 
 const text = z.string().max(100_000);
 export const answerRequestSchema = z.object({
@@ -106,8 +106,8 @@ export function answerTargets(
         /consent|agree(?:ment)?|certif|attest|acknowledg|arbitrat|privacy|gender|race|ethnic|disabil|veteran|sexual|religio|citizenship|visa|sponsor|authori[sz].*work|eligible.*work|salary|compensation|relocat|start date|notice period|criminal|background check/i;
       const manualReason =
         field.type === "consent" ||
-        field.name.startsWith("demographic_") ||
-        /Equal opportunity|Data consent/i.test(section.title) ||
+        field.category === "demographic" ||
+        field.category === "consent" ||
         personal.test(q.label)
           ? "Please answer this personally; your CV cannot confirm this choice."
           : field.type === "input_file" && !cover

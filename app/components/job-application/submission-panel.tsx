@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import type { ImportedJob } from "@/lib/jobs/greenhouse";
+import type { ImportedJob } from "@/lib/jobs/types";
 import type { Answer, SavedCVAttachment } from "@/lib/jobs/answer-draft";
 import { activeStatuses, type SubmissionRecord } from "@/lib/submissions/types";
 
@@ -100,7 +100,7 @@ export function SubmissionPanel({
     >
       <h2 className="font-semibold">Submit application</h2>
       <p className="text-sm text-muted-foreground">
-        Apply sends a saved copy of these answers and attachments to Greenhouse.
+        Apply sends a saved copy of these answers and attachments to the job board.
         Run the submission worker on this computer; its browser may need your
         help with CAPTCHA or extra fields.
       </p>

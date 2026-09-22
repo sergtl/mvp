@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { ImportedJob } from "@/lib/jobs/greenhouse";
+import type { ImportedJob } from "@/lib/jobs/types";
 import { answerTargets } from "@/lib/jobs/answers";
 import { AnswersForm } from "./answers-form";
 import { CvSelector } from "./cv-selector";

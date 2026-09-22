@@ -4,7 +4,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { resumeFields } from "@/lib/jobs/answer-draft";
-import type { ImportedJob } from "@/lib/jobs/greenhouse";
+import type { ImportedJob } from "@/lib/jobs/types";
 import type { ParsedCV } from "./download-selected-cv";
 
 const control = "w-full min-w-0 rounded-md border bg-background p-2 text-sm";

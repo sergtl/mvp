@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { JobField } from "@/lib/jobs/greenhouse";
+import type { JobField } from "@/lib/jobs/types";
 import { supportedFieldTypes, type Answer } from "@/lib/jobs/answer-draft";
 
 const control = "w-full min-w-0 rounded-md border bg-background p-2 text-sm";

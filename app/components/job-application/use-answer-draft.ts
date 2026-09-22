@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { AnswerResult } from "@/lib/jobs/answers";
-import type { ImportedJob } from "@/lib/jobs/greenhouse";
+import type { ImportedJob } from "@/lib/jobs/types";
 import {
   attachResume,
   applyGeneratedAnswers,

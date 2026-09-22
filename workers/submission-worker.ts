@@ -17,8 +17,12 @@ async function main() {
     reconcileSubmissions,
   } = await import("../lib/submissions/processing");
 
+  const { IMPORT_QUEUE, dispatchImports, processImport, reconcileImports } =
+    await import("../lib/jobs/import-processing");
+
   try {
     await pool.query("SELECT id, snapshot FROM submission LIMIT 0");
+    await pool.query("SELECT id, result FROM job_import LIMIT 0");
   } catch {
     await pool.end();
 
@@ -36,12 +40,24 @@ async function main() {
   await boss.start();
 
   await boss.createQueue(SUBMISSION_QUEUE);
+  await boss.createQueue(IMPORT_QUEUE);
 
   await boss.work<{ submissionId: string }>(
     SUBMISSION_QUEUE,
     { localConcurrency: 1, batchSize: 1 },
     async ([job]) => {
       await processSubmission(job.data.submissionId);
+    },
+  );
+
+  // Same process, same localConcurrency: 1 as submissions - both are "launch
+  // a headed browser and interact with an ATS page," and this project runs
+  // one visible browser at a time by design (see the ready message below).
+  await boss.work<{ importId: string }>(
+    IMPORT_QUEUE,
+    { localConcurrency: 1, batchSize: 1 },
+    async ([job]) => {
+      await processImport(job.data.importId);
     },
   );
 
@@ -55,6 +71,8 @@ async function main() {
     try {
       await dispatchSubmissions(boss);
       await reconcileSubmissions(boss);
+      await dispatchImports(boss);
+      await reconcileImports(boss);
     } catch {
       console.error(
         "Submission dispatch failed; check PostgreSQL connectivity.",

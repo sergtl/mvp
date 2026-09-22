@@ -2,7 +2,7 @@
 
 import { Field, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
-import type { JobQuestion } from "@/lib/jobs/greenhouse";
+import type { JobQuestion } from "@/lib/jobs/types";
 import { ApplicationField } from "./application-field";
 import { RegenerateControl } from "./regenerate-control";
 import type { AnswerDraft } from "./use-answer-draft";

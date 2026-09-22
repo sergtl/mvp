@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
-import { fillApplication, finishApplication, isConfirmed } from "../lib/submissions/browser";
+import { finishApplication } from "../lib/submissions/browser";
+import { fillApplication, isConfirmed, greenhouseAdapter } from "../lib/jobs/greenhouse";
 import { validateSubmission, SubmissionError } from "../lib/submissions/validate";
 import type { SubmissionInput, SubmissionStatus } from "../lib/submissions/types";
 
@@ -52,7 +53,7 @@ async function main() {
     assert.equal(await page.locator('[name="consent"]').isChecked(), true);
     assert.equal(await page.locator('[name="resume"]').evaluate(async el => (el as HTMLInputElement).files![0].text()), bytes.toString());
     const statuses: SubmissionStatus[] = [];
-    const result = await finishApplication(page, async status => { statuses.push(status); }, [], 20);
+    const result = await finishApplication(page, async status => { statuses.push(status); }, [], greenhouseAdapter, 20);
     assert.equal(result, "submitted");
     assert.deepEqual(statuses, ["submitting"]);
     assert.equal(await isConfirmed(page), true);
@@ -64,7 +65,7 @@ async function main() {
     missing.job.sections[0].questions[0].label = "Missing question";
     assert((await fillApplication(page, missing, files)).includes("Missing question"));
     const manualStates: SubmissionStatus[] = [];
-    assert.equal(await finishApplication(page, async status => { manualStates.push(status); }, ["Missing question"], 20), "needs_verification");
+    assert.equal(await finishApplication(page, async status => { manualStates.push(status); }, ["Missing question"], greenhouseAdapter, 20), "needs_verification");
     assert.deepEqual(manualStates, ["needs_input"]);
     assert.equal(await page.locator('form').count(), 1, "Unmatched fields must prevent automatic submission");
 

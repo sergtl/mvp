@@ -52,7 +52,7 @@ export async function processSubmission(id: string, run = submitInBrowser) {
     .update(submission)
     .set({
       status: "processing",
-      message: "Opening Greenhouse and filling your application…",
+      message: "Opening the application and filling it in…",
       updatedAt: new Date(),
     })
     .where(and(eq(submission.id, id), eq(submission.status, "queued")))
@@ -82,8 +82,8 @@ export async function processSubmission(id: string, run = submitInBrowser) {
     await progress(
       status,
       status === "submitted"
-        ? "Greenhouse confirmed your application was received."
-        : "No confirmation was captured. Check Greenhouse or your email before applying again. We will not retry automatically.",
+        ? "The application was confirmed as received."
+        : "No confirmation was captured. Check the job posting or your email before applying again. We will not retry automatically.",
     );
   } catch (error) {
     if (error instanceof BrowserNotStarted) {
@@ -93,7 +93,7 @@ export async function processSubmission(id: string, run = submitInBrowser) {
     // The browser may already have sent the form. Even a timeout is ambiguous.
     await progress(
       "needs_verification",
-      "The browser stopped before a result was confirmed. Check Greenhouse or your email. This application will not be retried automatically.",
+      "The browser stopped before a result was confirmed. Check the job posting or your email. This application will not be retried automatically.",
     );
   }
 }
@@ -122,7 +122,7 @@ export async function reconcileSubmissions(boss: PgBoss) {
           status: notStarted ? "failed" : "needs_verification",
           message: notStarted
             ? "The submission worker did not start this application. You can try again."
-            : "The worker was interrupted. Check Greenhouse or your email; we will not submit again automatically.",
+            : "The worker was interrupted. Check the job posting or your email; we will not submit again automatically.",
           updatedAt: new Date(),
         })
         .where(

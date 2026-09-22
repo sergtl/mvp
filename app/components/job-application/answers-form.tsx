@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import type { ImportedJob } from "@/lib/jobs/greenhouse";
+import type { ImportedJob } from "@/lib/jobs/types";
 import { QuestionFields } from "./question-fields";
 import type { AnswerDraft } from "./use-answer-draft";
 import type { useRegenerateAnswer } from "./use-regenerate-answer";

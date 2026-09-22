@@ -15,6 +15,7 @@
     "test:parsing-api": "tsx scripts/test-cv-parsing-api.ts",
     "test:cv-ai": "node --import tsx scripts/test-cv-ai.ts",
     "test:greenhouse": "node --import tsx tests/greenhouse.test.ts",
+    "test:ats-adapter": "node --import tsx tests/ats-adapter.test.ts",
     "test:job-answers": "node --import tsx tests/job-answers.test.ts",
     "worker:submission": "tsx workers/submission-worker.ts",
     "test:submission": "node --import tsx tests/submission.test.ts",

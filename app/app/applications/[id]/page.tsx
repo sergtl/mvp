@@ -69,7 +69,7 @@ export default async function ApplicationPage({
           <h2 className="text-lg font-semibold">Saved application</h2>
           <p className="text-sm text-muted-foreground">
             These are the answers and attachments saved when you clicked Apply.
-            They cannot be edited. Changes made directly in the Greenhouse
+            They cannot be edited. Changes made directly in the worker’s
             browser are not captured here.
           </p>
         </div>
