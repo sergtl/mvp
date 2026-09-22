@@ -29,13 +29,16 @@ import {
   ClipboardList,
   EllipsisVertical,
   FileUser,
+  IdCard,
   LogOut,
+  NotebookPen,
   Send,
   UserRound,
   type LucideIcon,
 } from "lucide-react";
 
 import Link from "next/link";
+import React from "react";
 
 export function NavMain({
   items,
@@ -129,15 +132,6 @@ export function NavUser({
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuGroup>
-              <DropdownMenuItem asChild>
-                <Link href="/account">
-                  <UserRound aria-hidden="true" />
-                  Account
-                </Link>
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => authClient.signOut()}>
               <LogOut aria-hidden="true" />
               Log out
@@ -152,38 +146,36 @@ export function NavUser({
 const data = [
   {
     title: "Apply to a job",
-    url: "/",
+    url: "/app",
     icon: Send,
   },
   {
     title: "Applications",
-    url: "/applications",
+    url: "/app/applications",
     icon: ClipboardList,
   },
   {
     title: "My CVs",
-    url: "/my-cvs",
+    url: "/app/my-cvs",
     icon: FileUser,
+  },
+  {
+    title: "Profile",
+    url: "/app/profile",
+    icon: IdCard,
+  },
+  {
+    title: "Saved answers",
+    url: "/app/answers",
+    icon: NotebookPen,
   },
 ];
 
-export function MainSidebar() {
+export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { data: session } = authClient.useSession();
 
   return (
-    <Sidebar collapsible="offcanvas">
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              className="data-[slot=sidebar-menu-button]:p-1.5!"
-              asChild
-            >
-              <Link href="/">MVP</Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarHeader>
+    <Sidebar variant="inset" {...props}>
       <SidebarContent>
         <NavMain items={data} />
       </SidebarContent>

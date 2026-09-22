@@ -22,21 +22,20 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 const formSchema = z.object({
   email: z.string().trim().pipe(z.email("Enter a valid email address.")),
-  password: z.string().min(1, "Enter your password.").max(128, "Use no more than 128 characters."),
+  password: z
+    .string()
+    .min(1, "Enter your password.")
+    .max(128, "Use no more than 128 characters."),
 });
 
 export function SignInForm({
   className,
-  onSignUp,
-  onSuccess,
   ...props
-}: React.ComponentProps<"div"> & {
-  onSignUp: () => void;
-  onSuccess: () => Promise<void>;
-}) {
+}: React.ComponentProps<"div">) {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -58,7 +57,6 @@ export function SignInForm({
     gcTime: 0,
     onSuccess: async () => {
       form.reset();
-      await onSuccess();
     },
   });
 
@@ -93,19 +91,24 @@ export function SignInForm({
                         {...field}
                         id="email"
                         autoComplete="email"
-                        aria-describedby={fieldState.invalid ? "email-error" : undefined}
+                        aria-describedby={
+                          fieldState.invalid ? "email-error" : undefined
+                        }
                         type="email"
                         aria-invalid={fieldState.invalid}
                         placeholder="m@example.com"
                       />
-  
+
                       {fieldState.invalid && (
-                        <FieldError id="email-error" errors={[fieldState.error]} />
+                        <FieldError
+                          id="email-error"
+                          errors={[fieldState.error]}
+                        />
                       )}
                     </Field>
                   )}
                 />
-  
+
                 <Controller
                   name="password"
                   control={form.control}
@@ -118,26 +121,34 @@ export function SignInForm({
                         {...field}
                         id="password"
                         autoComplete="current-password"
-                        aria-describedby={fieldState.invalid ? "password-error" : undefined}
+                        aria-describedby={
+                          fieldState.invalid ? "password-error" : undefined
+                        }
                         type="password"
                         aria-invalid={fieldState.invalid}
                         required
                       />
-  
+
                       {fieldState.invalid && (
-                        <FieldError id="password-error" errors={[fieldState.error]} />
+                        <FieldError
+                          id="password-error"
+                          errors={[fieldState.error]}
+                        />
                       )}
                     </Field>
                   )}
                 />
-  
+
                 <Field>
-                  {mutation.error && <FieldError>{mutation.error.message}</FieldError>}
+                  {mutation.error && (
+                    <FieldError>{mutation.error.message}</FieldError>
+                  )}
                   <Button type="submit" disabled={mutation.isPending}>
                     {mutation.isPending ? "Signing in…" : "Login"}
                   </Button>
                   <FieldDescription className="text-center">
-                    Don&apos;t have an account? <Button type="button" variant="link" disabled={mutation.isPending} onClick={onSignUp}>Sign up</Button>
+                    Don&apos;t have an account?{" "}
+                    <Link href="/register">Sign up</Link>
                   </FieldDescription>
                 </Field>
               </FieldGroup>

@@ -19,7 +19,9 @@
     "worker:submission": "tsx workers/submission-worker.ts",
     "test:submission": "node --import tsx tests/submission.test.ts",
     "test:submission-queue": "node --import tsx tests/submission-queue.test.ts",
-    "test:applications": "node --import tsx tests/applications.test.tsx"
+    "test:applications": "node --import tsx tests/applications.test.tsx",
+    "test:profile": "node --import tsx tests/profile.test.ts",
+    "test:step1": "node --import tsx tests/step1.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

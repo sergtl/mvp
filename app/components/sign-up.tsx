@@ -22,22 +22,21 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 const formSchema = z.object({
   name: z.string().trim().min(1, "Enter your name.").max(100),
   email: z.string().trim().pipe(z.email("Enter a valid email address.")),
-  password: z.string().min(8, "Use at least 8 characters.").max(128, "Use no more than 128 characters."),
+  password: z
+    .string()
+    .min(8, "Use at least 8 characters.")
+    .max(128, "Use no more than 128 characters."),
 });
 
 export function SignUpForm({
   className,
-  onSignIn,
-  onSuccess,
   ...props
-}: React.ComponentProps<"div"> & {
-  onSignIn: () => void;
-  onSuccess: () => Promise<void>;
-}) {
+}: React.ComponentProps<"div">) {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -60,7 +59,6 @@ export function SignUpForm({
     gcTime: 0,
     onSuccess: async () => {
       form.reset();
-      await onSuccess();
     },
   });
 
@@ -95,18 +93,23 @@ export function SignUpForm({
                         {...field}
                         id="name"
                         autoComplete="name"
-                        aria-describedby={fieldState.invalid ? "name-error" : undefined}
+                        aria-describedby={
+                          fieldState.invalid ? "name-error" : undefined
+                        }
                         aria-invalid={fieldState.invalid}
                         placeholder="John Doe"
                       />
-  
+
                       {fieldState.invalid && (
-                        <FieldError id="name-error" errors={[fieldState.error]} />
+                        <FieldError
+                          id="name-error"
+                          errors={[fieldState.error]}
+                        />
                       )}
                     </Field>
                   )}
                 />
-  
+
                 <Controller
                   name="email"
                   control={form.control}
@@ -117,19 +120,24 @@ export function SignUpForm({
                         {...field}
                         id="email"
                         autoComplete="email"
-                        aria-describedby={fieldState.invalid ? "email-error" : undefined}
+                        aria-describedby={
+                          fieldState.invalid ? "email-error" : undefined
+                        }
                         type="email"
                         aria-invalid={fieldState.invalid}
                         placeholder="m@example.com"
                       />
-  
+
                       {fieldState.invalid && (
-                        <FieldError id="email-error" errors={[fieldState.error]} />
+                        <FieldError
+                          id="email-error"
+                          errors={[fieldState.error]}
+                        />
                       )}
                     </Field>
                   )}
                 />
-  
+
                 <Controller
                   name="password"
                   control={form.control}
@@ -142,26 +150,33 @@ export function SignUpForm({
                         {...field}
                         id="password"
                         autoComplete="new-password"
-                        aria-describedby={fieldState.invalid ? "password-error" : undefined}
+                        aria-describedby={
+                          fieldState.invalid ? "password-error" : undefined
+                        }
                         type="password"
                         aria-invalid={fieldState.invalid}
                         required
                       />
-  
+
                       {fieldState.invalid && (
-                        <FieldError id="password-error" errors={[fieldState.error]} />
+                        <FieldError
+                          id="password-error"
+                          errors={[fieldState.error]}
+                        />
                       )}
                     </Field>
                   )}
                 />
-  
+
                 <Field>
-                  {mutation.error && <FieldError>{mutation.error.message}</FieldError>}
+                  {mutation.error && (
+                    <FieldError>{mutation.error.message}</FieldError>
+                  )}
                   <Button type="submit" disabled={mutation.isPending}>
                     {mutation.isPending ? "Creating account…" : "Sign up"}
                   </Button>
                   <FieldDescription className="text-center">
-                    Already have an account? <Button type="button" variant="link" disabled={mutation.isPending} onClick={onSignIn}>Sign in</Button>
+                    Already have an account? <Link href="/login">Sign in</Link>
                   </FieldDescription>
                 </Field>
               </FieldGroup>

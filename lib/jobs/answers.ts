@@ -1,9 +1,12 @@
 import { z } from "zod";
-import type { ImportedJob } from "./greenhouse";
+import { CONTRACTOR_POLICIES } from "./contractors";
+import type { ImportedJob, JobQuestion } from "./greenhouse";
 
 const text = z.string().max(100_000);
 export const answerRequestSchema = z.object({
   cvId: z.uuid(),
+  // What the posting says about contractors, from the eligibility check.
+  contractors: z.enum(CONTRACTOR_POLICIES).optional(),
   job: z.object({
     id: z.string(),
     title: text,
@@ -58,29 +61,40 @@ export type AnswerTarget = {
   manualReason: string | null;
 };
 
-export function answerTargets(job: ImportedJob): AnswerTarget[] {
+export type QuestionKind = "cover_letter" | "motivation" | "link" | "other";
+
+const joined = (...parts: string[]) => parts.join(" ");
+
+export function questionKind(q: JobQuestion): QuestionKind {
+  const names = q.fields.map((f) => f.name).join(" ");
+
+  if (/cover[ _-]?letter/i.test(joined(q.label, q.description, names)))
+    return "cover_letter";
+
+  if (
+    /why\b|motivat|interest.*(?:role|company|position)|what.*(?:attract|excite)/i.test(
+      joined(q.label, q.description),
+    )
+  )
+    return "motivation";
+
+  return /linked[ _-]?in|git[ _-]?hub/i.test(joined(q.label, q.description, names))
+    ? "link"
+    : "other";
+}
+
+// `includeOptional` also targets optional questions: used when the user
+// explicitly asks for a draft of one.
+export function answerTargets(
+  job: ImportedJob,
+  { includeOptional = false } = {},
+): AnswerTarget[] {
   return job.sections.flatMap((section, s) =>
     section.questions.flatMap((q, i) => {
-      const cover = /cover[ _-]?letter/i.test(
-        q.label +
-          " " +
-          q.description +
-          " " +
-          q.fields.map((f) => f.name).join(" "),
-      );
-      const motivation =
-        /why\b|motivat|interest.*(?:role|company|position)|what.*(?:attract|excite)/i.test(
-          q.label + " " + q.description,
-        );
-      const profileLink = /linked[ _-]?in|git[ _-]?hub/i.test(
-        q.label +
-          " " +
-          q.description +
-          " " +
-          q.fields.map((field) => field.name).join(" "),
-      );
+      const kind = questionKind(q);
+      const cover = kind === "cover_letter";
 
-      if (!q.required && !cover && !motivation && !profileLink) return [];
+      if (!q.required && kind === "other" && !includeOptional) return [];
 
       // Resume/cover letter alternatives are a single answer. Prefer editable text.
       let f = q.fields.findIndex((field) => field.type === "textarea");
@@ -138,7 +152,15 @@ export const generatedAnswersSchema = z.object({
 
 export type GeneratedAnswers = z.infer<typeof generatedAnswersSchema>;
 export type AnswerResult = {
-  answers: { id: string; value: string | string[]; fileText?: string }[];
+  answers: {
+    id: string;
+    value: string | string[] | boolean;
+    fileText?: string;
+    // Not drafted by the AI: stated in the profile, or reused from an answer
+    // the user approved on an earlier application (`from` names its company).
+    source?: "profile" | "memory";
+    from?: string;
+  }[];
   skipped: { questionKey: string; reason: string }[];
 };
 

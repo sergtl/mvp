@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { saveApprovedAnswers } from "@/lib/answers/memory";
 import { db } from "@/lib/db";
 import { cv, cvFile, submission, submissionFile } from "@/lib/db/schema";
 import {
@@ -240,6 +241,9 @@ export async function POST(request: Request) {
         await tx
           .insert(submissionFile)
           .values(files.map((file) => ({ ...file, submissionId: record.id })));
+
+      // Remember what the user approved, to draft future answers in their voice.
+      await saveApprovedAnswers(tx, session.user.id, { ...input, job: live }, files);
       return record;
     });
 

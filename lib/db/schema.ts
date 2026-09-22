@@ -1,4 +1,5 @@
 import type { ExtractedCV, ParseStatus } from "../cv/extraction-schema";
+import type { Profile } from "../profile/schema";
 import { boolean, bytea, check, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -118,6 +119,33 @@ export const cvReview = pgTable("cv_review", {
   data: jsonb("data").$type<ExtractedCV>().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// Standing facts about the user (work eligibility, compensation, EEO choices).
+// Per user, not per CV, so it survives uploading a new CV.
+export const profile = pgTable("profile", {
+  userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  data: jsonb("data").$type<Profile>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Long-form answers the user approved when applying, reused as style examples
+// and, for company-neutral questions, verbatim. Owned by the user; deletable.
+export const answerMemory = pgTable("answer_memory", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  questionKey: text("question_key").notNull(),
+  question: text("question").notNull(),
+  kind: text("kind").$type<"cover_letter" | "motivation" | "text">().notNull(),
+  answer: text("answer").notNull(),
+  company: text("company").notNull().default(""),
+  jobTitle: text("job_title").notNull().default(""),
+  sourceURL: text("source_url").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, t => [
+  uniqueIndex("answer_memory_user_question_job_idx").on(t.userId, t.questionKey, t.sourceURL),
+  index("answer_memory_user_created_idx").on(t.userId, t.createdAt),
+  check("answer_memory_kind_check", sql`${t.kind} IN ('cover_letter', 'motivation', 'text')`),
+]);
 
 // The row is both the immutable application snapshot and the durable queue.
 export const submission = pgTable("submission", {

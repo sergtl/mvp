@@ -13,6 +13,7 @@ export class JobImportError extends Error {
 // Never fetch a user-supplied host. Extract identifiers and build a fixed API URL.
 export function parseGreenhouseURL(input: string) {
   let url: URL;
+
   try {
     url = new URL(input.trim());
   } catch {
@@ -75,6 +76,7 @@ const question = z.object({
   fields: z.array(field),
 });
 
+// TODO: confirm whether this is the correct return format by greenhouse
 const jobSchema = z.object({
   id: identifier,
   title: z.string(),
@@ -243,6 +245,7 @@ export function normalizeJob(payload: unknown, sourceURL: string): ImportedJob {
 
   for (const consent of job.data_compliance ?? []) {
     const questions: JobQuestion[] = [];
+
     const add = (name: string, label: string, required: boolean) =>
       questions.push({
         label,
@@ -250,9 +253,11 @@ export function normalizeJob(payload: unknown, sourceURL: string): ImportedJob {
         description: "",
         fields: [{ name, type: "consent", options: [] }],
       });
+
     const separate =
       consent.requires_processing_consent !== undefined ||
       consent.requires_retention_consent !== undefined;
+
     if (separate) {
       if (consent.requires_processing_consent)
         add(
@@ -272,12 +277,14 @@ export function normalizeJob(payload: unknown, sourceURL: string): ImportedJob {
         "I consent to the processing and retention of my application data.",
         true,
       );
+
     if (consent.demographic_data_consent_applies)
       add(
         "gdpr_demographic_data_consent_given",
         "I consent to the processing of my demographic data.",
         false,
       );
+
     if (questions.length)
       sections.push({
         title: "Data consent",

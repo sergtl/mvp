@@ -1,6 +1,18 @@
 import type { AnswerResult } from "./answers";
 import type { ImportedJob } from "./greenhouse";
 
+// Field types the application form can render and submit. Anything else is
+// flagged for the user to complete on the original posting.
+export const supportedFieldTypes = new Set([
+  "input_text",
+  "input_file",
+  "input_hidden",
+  "textarea",
+  "multi_value_single_select",
+  "multi_value_multi_select",
+  "consent",
+]);
+
 export function resumeFields(job: ImportedJob) {
   return job.sections.flatMap((section, s) =>
     section.questions.flatMap((question, q) =>
@@ -79,6 +91,8 @@ export function applyGeneratedAnswers(
   const fileDrafts = { ...previousDrafts };
 
   let count = 0;
+  // Why a question was filled without the AI, shown next to it.
+  const provenance: Record<string, { source: "profile" | "memory"; message: string }> = {};
 
   const filled = (key: string) =>
     Object.entries(answers).some(
@@ -97,6 +111,16 @@ export function applyGeneratedAnswers(
 
       fileDrafts[answer.id] = answer.fileText;
     } else answers[answer.id] = answer.value;
+    if (answer.source === "profile")
+      provenance[key] = {
+        source: "profile",
+        message: "Filled from your profile. Change it there to update future applications.",
+      };
+    else if (answer.source === "memory")
+      provenance[key] = {
+        source: "memory",
+        message: `Reused from your answer${answer.from ? ` to ${answer.from}` : ""}. Edit it if it needs changing.`,
+      };
     count++;
   }
 
@@ -106,5 +130,54 @@ export function applyGeneratedAnswers(
       .map((item) => [item.questionKey, item.reason]),
   );
 
-  return { answers, fileDrafts, notes, count };
+  return { answers, fileDrafts, notes, count, provenance };
+}
+
+// "Check required fields": every required question has at least one visible
+// answer, no unsupported field type is left unhandled, and every selected
+// free-form option has its accompanying text filled in.
+export function validateRequiredAnswers(
+  job: ImportedJob,
+  answers: Record<string, Answer>,
+  freeText: Record<string, string>,
+): Record<string, string> {
+  const nextErrors: Record<string, string> = {};
+
+  job.sections.forEach((section, s) =>
+    section.questions.forEach((question, q) => {
+      const key = `${s}-${q}`;
+      const visible = question.fields
+        .map((field, f) => ({ field, id: `${key}-${f}` }))
+        .filter(({ field }) => field.type !== "input_hidden");
+
+      if (
+        question.required &&
+        visible.length &&
+        !visible.some(({ id }) => hasAnswer(answers[id]))
+      )
+        nextErrors[key] = "Answer this question using at least one of its inputs.";
+
+      for (const { field, id } of visible) {
+        if (!supportedFieldTypes.has(field.type))
+          nextErrors[key] =
+            "This question includes a field that must be completed on Greenhouse.";
+
+        const value = answers[id];
+        const selected = Array.isArray(value)
+          ? value
+          : typeof value === "string"
+            ? [value]
+            : [];
+
+        if (
+          selected.length === 1 &&
+          field.options.some((o) => o.value === selected[0] && o.freeForm) &&
+          !freeText[`${id}:${selected[0]}`]?.trim()
+        )
+          nextErrors[key] = "Please specify your selected answer.";
+      }
+    }),
+  );
+
+  return nextErrors;
 }

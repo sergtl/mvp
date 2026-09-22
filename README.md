@@ -23,7 +23,7 @@ docker compose down
 
 ### Email and password authentication
 
-Better Auth handles registration, sign-in, sessions, and sign-out on the home page.
+Better Auth handles registration, sign-in, sessions, and sign-out. Sign-in and registration live at `/login` and `/register`; every signed-in page lives under `/app`.
 Set these server-side variables in `.env.local`:
 
 ```dotenv
@@ -52,141 +52,192 @@ With the app running on port 3000 and the Compose database running, run
 `node scripts/test-auth.mjs` to check registration, password hashing, sessions,
 invalid passwords, sign-out, and sign-in. It removes its temporary test account.
 
-### CV uploads
+## Features
 
-After signing in, use **Upload CV** on the home page. PDF and DOCX files up to
-10 MB are supported. Uploaded filenames link to private downloads.
+**Implemented** sections describe what the code does today. **Planned** items are tracked in [docs/ROADMAP.md](docs/ROADMAP.md) and do not exist yet. The examples below were executed on 2026-09-21; where a model call would cost money it is stubbed, and each example says so.
 
-Apply migrations with `pnpm db:migrate` before using uploads. The `cv` table
-stores metadata and a foreign key to the Better Auth user. `cv_file` stores
-the original bytes in a PostgreSQL `bytea` column. Both records are created in
-one transaction, and deleting a user cascades to their CVs and file contents.
-Each user can have multiple CVs; uploading another file does not replace one.
+### 1. CV upload and parsing
 
-Endpoints require a session:
+**Purpose.** Turn an uploaded CV into structured facts (contact, experience, skills, …) that application answers are drafted from, and let the user correct them.
 
-- `GET /api/cvs`: current user's CV metadata, without file contents.
-- `POST /api/cvs`: raw file body, with a URL-encoded filename in `X-File-Name`
-  and a same-origin `Origin` header. Ownership comes from the session.
-- `GET /api/cvs/:id`: attachment download, restricted to the owner.
+**How it works** (implemented)
 
-The server enforces the size limit while reading the body and checks PDF
-signatures or the DOCX ZIP directory. These checks are not full document
-validation or malware scanning. Parsing is supported for PDFs only.
-File contents are included in database backups; ensure the deployment's HTTP
-body-size limit allows 10 MB uploads.
+1. On the **Apply** page (`/app`), upload a PDF or DOCX (≤10 MB). `POST /api/cvs` stores the file (`cv` + `cv_file`) and, for PDFs, a queued `cv_parse` row, in one transaction.
+2. The worker (`pnpm worker`) hands queued rows to pg-boss every 3 s, extracts the PDF text in a child process, and sends the text (not the file) to OpenAI Structured Outputs.
+3. The result is Zod-validated and saved as `cv_parse.extracted_data`. The Apply page polls, then offers **Review extracted CV**; corrections are saved separately in `cv_review`.
+4. Answers are drafted from the reviewed copy if one exists, otherwise from the latest completed parse.
 
-With the local app and Compose database running, `pnpm test:cv` checks uploads,
-byte-for-byte downloads, ownership isolation, invalid files, size limits, and
-cleanup via cascading deletes. Temporary test accounts and CVs are removed.
+`cv_parse` is one row per machine attempt (status, pg-boss job id, raw text, model output, error code). `cv_review` is at most one row per CV holding the user's corrected copy. Keeping them apart means edits never overwrite the model output and the worker never touches corrections.
 
-### PDF parsing worker
+**Example** (real validation, real PDF extraction in the child process, real schema; the model response is stubbed)
 
-Add these server-side settings to `.env.local` (never use a `NEXT_PUBLIC_` prefix):
-
-```dotenv
-OPENAI_API_KEY=<your-openai-api-key>
-OPENAI_MODEL=gpt-4.1-mini
+```text
+validateUpload(pdf)  → {"filename":"Jane Example CV.pdf","contentType":"application/pdf"}
+validateUpload(docx) → {"filename":"cv.docx","contentType":"application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+cv.txt, bad PDF bytes, fake docx → 415 "Upload a valid PDF or DOCX file."
+extractPDF           → "Jane Example, Senior Software Engineer. jane@example.com. Tbilisi, Georgia. TypeScript, PostgreSQL."
+almost-empty PDF     → failure code needs_ocr        corrupt PDF → invalid_pdf
+extractedCVSchema    → {"contact":{"name":"Jane Example","email":"jane@example.com","phone":"","location":"Tbilisi, Georgia","links":[]},
+                        "summary":"Senior Software Engineer","experience":[],"education":[],"skills":["TypeScript","PostgreSQL"],"languages":[]}
+model output with skills as a string → rejected: skills, expected array, received string
 ```
 
-Run `pnpm db:migrate`, then run `pnpm dev` and `pnpm worker` in separate terminals.
-The worker loads `.env.local`, then `.env`, without overriding exported environment
-variables. It requires Node.js 22.12+ (Node.js 24 recommended) and access to the same
-PostgreSQL database as the web app. In deployment, run `pnpm worker` as a separate,
-long-lived service with automatic restart, from the repository root. Keep `tsx`,
-`workers/`, and the application's dependencies available in its deployment.
+**Code map**
 
-New PDF uploads automatically create a queued `cv_parse` row in the file-save
-transaction. Older PDFs have a **Parse CV** button. The worker dispatches queued
-rows into pg-boss every three seconds, storing each job ID in the same database
-transaction as job creation. pg-boss creates its own schema on worker startup;
-the database role must have permission to create it. The web app can accept
-uploads while the worker is offline. DOCX files remain downloadable but are not
-parsed.
+| Step | Where |
+|---|---|
+| Upload checks (size, name, PDF signature, DOCX zip directory) | [lib/cv/upload.ts](lib/cv/upload.ts): `readUpload`, `validateUpload` |
+| Upload, list, download | [app/api/cvs/route.ts](app/api/cvs/route.ts), [app/api/cvs/[id]/route.ts](app/api/cvs/[id]/route.ts) |
+| Queue, retries, reconciliation | [lib/cv/processing.ts](lib/cv/processing.ts): `dispatchPending`, `processParseJob`, `reconcileFailedJobs`; [workers/cv-worker.ts](workers/cv-worker.ts) |
+| PDF text | [lib/cv/pdf-text.ts](lib/cv/pdf-text.ts): `extractPDF`; [workers/pdf-text.ts](workers/pdf-text.ts) |
+| AI extraction and schema | [lib/cv/ai.ts](lib/cv/ai.ts): `extractWithAI`; [lib/cv/extraction-schema.ts](lib/cv/extraction-schema.ts) |
+| Parse and review endpoints | [app/api/cvs/[id]/parse/route.ts](app/api/cvs/[id]/parse/route.ts), [app/api/cvs/[id]/review/route.ts](app/api/cvs/[id]/review/route.ts) |
+| Which version answers use | [lib/cv/data.ts](lib/cv/data.ts): `loadCVData` |
+| UI | [app/components/cv-upload.tsx](app/components/cv-upload.tsx), [app/components/cv-review.tsx](app/components/cv-review.tsx) |
+| Tables | [lib/db/schema.ts](lib/db/schema.ts): `cv`, `cvFile`, `cvParse`, `cvReview` |
 
-One worker processes one CV at a time. PDF extraction runs in a separate process
-with a 30-second timeout, 256 MB Node heap limit, 30-page limit, and 100,000-character
-text limit. PDFs with too little text are marked `needs_ocr`; OCR is not included.
-The text is sent to OpenAI's Responses API using Structured Outputs and validated
-with Zod. The original PDF is not sent. Requests use `store: false`; this setting
-does not itself guarantee zero data retention by the provider.
+**Edge cases and failure handling**
 
-Transient AI errors retry up to twice with backoff. Extracted text is reused for
-retries. Successful attempts are not reprocessed, and corrections are stored
-separately in `cv_review`. A crash after an OpenAI response but before the database
-commit can cause a repeated API call on retry; database writes remain idempotent.
-Queue failures after exhausted retries are reconciled to a visible failure status.
+- DOCX passes validation and can be downloaded, but is **never parsed**, so it cannot be used to draft answers.
+- Too little text becomes `needs_ocr` (there is no OCR); an unreadable or encrypted PDF becomes `invalid_pdf`; more than 30 pages or 100,000 characters becomes `pdf_limit`; extraction runs in a child process with a 30 s timeout and 256 MB heap (`pdf_timeout`).
+- Transient AI errors retry twice with backoff and reuse the saved text. Non-retryable errors and exhausted retries end as `failed`; jobs lost or failed inside the queue are reconciled to `failed` (`worker_failed`). A crash between the OpenAI response and the database commit can repeat one API call; writes are idempotent.
+- The web app accepts uploads while the worker is offline. The row stays `queued`, and the Apply-page checklist flags a stopped worker after 20 s.
+- A completed parse is never re-run (`POST /api/cvs/:id/parse` returns the existing row; only failed or needs-OCR attempts get a new one). Because a saved review wins over any parse, and there is no "reset to extracted" button, a review would shadow a future re-parse.
 
-The home page polls while parsing is queued or running, then offers **Review
-extracted CV**. Users can edit contact details, summary, experience, education,
-skills, and languages, inspect the extracted text, and save corrections. Parsing
-and review endpoints check ownership and mutation origins.
+**Trade-offs.** File bytes live in Postgres `bytea` (simple, included in backups, heavy at scale). The CV text, not the file, goes to OpenAI (`store: false` does not itself guarantee zero retention). One worker processes one CV at a time. Extraction accuracy is not measured, which is why the review step exists.
 
-- `GET /api/cvs/:id/parse`: latest attempt and saved review.
-- `POST /api/cvs/:id/parse`: start or retry parsing; active and completed attempts
-  are reused to avoid duplicate work.
-- `PUT /api/cvs/:id/review`: validate and save user corrections.
+**Planned** (see [roadmap](docs/ROADMAP.md), Step 0): DOCX parsing, reset-to-extracted, re-parse handling. OCR is not planned.
 
-Tests (no OpenAI key or paid API calls required):
+**Setup.** Add server-side settings to `.env.local` (never `NEXT_PUBLIC_`): `OPENAI_API_KEY` and `OPENAI_MODEL` (default `gpt-4.1-mini`). Run `pnpm db:migrate`, then `pnpm dev` and `pnpm worker` in separate terminals. The worker needs Node.js 22.12+ (24 recommended), the same database as the web app, and permission for pg-boss to create its own schema; in deployment run it as a separate long-lived service. Endpoints: `GET/POST /api/cvs`, `GET /api/cvs/:id`, `GET/POST /api/cvs/:id/parse`, `PUT /api/cvs/:id/review`. Tests: `pnpm test:cv` and `pnpm test:parsing-api` (need `localhost:3000` and the Compose DB), `pnpm test:parsing` (temporary database, real PDF extraction, stubbed AI), `pnpm test:cv-ai` (mocked HTTP). None call OpenAI.
+
+### 2. Job import and eligibility check
+
+**Purpose.** Load a Greenhouse posting with its application form, tell the user whether the role is open to them, and draft answers from what is already known about them.
+
+**How it works** (implemented)
+
+1. Paste a direct Greenhouse URL and click **Load job**. `GET /api/jobs/greenhouse` reads Greenhouse's public Job Board API (fixed hosts only, redirects rejected) and normalizes the description and the questions, options, EEO and consent sections.
+2. **Eligibility.** The page calls `POST /api/jobs/eligibility`. A model reads the posting for who it can hire: location, work authorization, citizenship, sponsorship, contractors. Every claim must carry a verbatim quote; a claim whose quote is not in the posting is discarded. The cleaned result is compared with the user's [profile](#profile-and-saved-answers) and shown as a banner (eligible, check this, or may not be open to you) with the quotes.
+3. **Answers.** **Generate answers** (`POST /api/jobs/answers`) fills what it can in three layers: facts stated in the profile (deterministic, never guessed), then answers the user approved on earlier applications, then the model for whatever is left. Each question can be redrafted with **Regenerate…** and an instruction. Drafts fill empty fields only and stay in page memory until **Apply** (feature 3).
+4. Generation also attaches the selected CV's original PDF to empty resume inputs. The AI request runs in the web process (60 s limit), so the worker is not required.
+
+**Example** (live posting `https://job-boards.greenhouse.io/gitlab/jobs/8801523002`, which may have closed since; real fetch, quote check, eligibility and profile resolution; the model's reading of the posting is stubbed)
+
+```text
+fetchGreenhouseJob → "Candidate Experience Specialist, Contractor" · GitLab · "Remote, United Kingdom" · 8,824 description chars
+  form: First Name*, Last Name*, Email*, Phone, Resume/CV* (file or text),
+        "Will you now or in the future require sponsorship for a visa to remain in your current location?"* (7 options),
+        "Do you have experience scheduling interviews in an enterprise environment?"*, "Where in EMEA are you currently based?"*,
+        + Equal opportunity: Disability, Veteran, Race, Gender
+posting says: "THIS IS A CONTRACT OPPORTUNITY -- INDIVIDUALS MUST BE BASED IN EMEA"
+
+model claims (stubbed): residency EMEA, contractors accepted, sponsorship offered ("We sponsor visas for this role.")
+cleanRequirements     → residency EMEA (quote kept), contractors accepted (quote kept), sponsorship → unknown (quote not in posting, dropped)
+
+checkEligibility, lives in Georgia, EU employee + worldwide B2B contractor
+  → "eligible": "You live in Georgia, which the posting accepts."   quote: "INDIVIDUALS MUST BE BASED IN EMEA"
+same posting, lives in the US
+  → "unclear": "The posting asks for candidates in EMEA; you live in United States. Companies define this region differently, so it may still work."
+
+resolveFromProfile (Georgia profile)      → []   (no start-date or link question; the sponsorship question names no country)
+  … with gender set to "Decline"          → [{"id":"4-1-0","value":"3","slot":"demographics"}]
+answerTargets (left for the model / user) → 0-0-0, 0-1-0, 0-2-0, 0-4-1 (resume text), 0-5-0 (manual), 0-6-0, 0-7-0
+```
+
+**Code map**
+
+| Step | Where |
+|---|---|
+| URL check, fetch, normalization | [lib/jobs/greenhouse.ts](lib/jobs/greenhouse.ts): `parseGreenhouseURL`, `fetchGreenhouseJob`, `normalizeJob`; [app/api/jobs/greenhouse/route.ts](app/api/jobs/greenhouse/route.ts) |
+| Reading the posting, quote verification | [lib/jobs/requirements.ts](lib/jobs/requirements.ts): `classifyRequirements`, `cleanRequirements` |
+| Profile vs posting | [lib/profile/eligibility.ts](lib/profile/eligibility.ts): `checkEligibility`; [app/api/jobs/eligibility/route.ts](app/api/jobs/eligibility/route.ts) |
+| Region and country matching | [lib/geo/regions.ts](lib/geo/regions.ts): `scopeCovers`, `scopesInText` |
+| Banner and Regenerate UI | [app/components/job-insights.tsx](app/components/job-insights.tsx); [app/components/job-import.tsx](app/components/job-import.tsx) |
+| Answer generation | [lib/jobs/generate-answers.ts](lib/jobs/generate-answers.ts): `generateJobAnswers`, `regenerateAnswer`; [lib/jobs/answers.ts](lib/jobs/answers.ts): `answerTargets`; [app/api/jobs/answers/route.ts](app/api/jobs/answers/route.ts) |
+| Profile-filled answers | [lib/profile/resolve.ts](lib/profile/resolve.ts): `resolveFromProfile` |
+| Reused answers | [lib/answers/plan.ts](lib/answers/plan.ts): `planMemory`; [lib/answers/memory.ts](lib/answers/memory.ts) |
+| Applying drafts in the page | [lib/jobs/answer-draft.ts](lib/jobs/answer-draft.ts): `applyGeneratedAnswers` |
+
+**Edge cases and failure handling**
+
+- Custom career domains and shortened links are rejected: use the direct Greenhouse URL. Greenhouse `404`, `429` and `5xx` map to readable messages. Unsupported field types are flagged for completion on the original posting.
+- If the eligibility check fails the page says so and you can still apply. **The banner never blocks Apply.**
+- Unknown scopes and quotes not found in the posting are dropped. Posting text is normalized with headings in uppercase, and quotes are compared case- and whitespace-insensitively, so the banner can show an uppercase quote. The classifier sees at most 40,000 characters.
+- Authorization is **never auto-answered "No"** (a contractor abroad often cannot truthfully say Yes, and an automatic No can disqualify them). A work-authorization or sponsorship question that names no country stays manual: the GitLab question above is left to the user. Consent, EEO and personal questions are filled only from an explicit profile choice.
+- Dropdown answers are validated against the job's real options; free-form options are never selected; cover letters use a text alternative or produce an editable `cover-letter.txt`. Reused answers are skipped if they name another company.
+- Known limitations: regions EUROPE, EMEA, LATAM and APAC are treated as fuzzy, so a US resident on an EMEA-only posting gets "unclear", not "blocked". EOR routes in the profile are stored but ignored by the check and the resolver. "Where in EMEA are you currently based?" is not filled from the profile (EMEA is not recognized as a named place in question text).
+
+**Trade-offs.** One model call per import reads the posting (cost); the result is cached in memory for an hour (200 entries, lost on restart). Quote verification trades recall for trust: a real claim quoted imprecisely is dropped. Structured-output validation cannot guarantee factual accuracy, so drafts need review.
+
+**Planned** ([roadmap](docs/ROADMAP.md), Step 0 and A): running the prompts against ~15 real postings, a per-region borderline list, EOR semantics, a database-backed posting cache and per-user LLM limits, and automatic discovery of jobs (today the user pastes every URL). Only Greenhouse is supported; Ashby and Lever are Step D.
+
+**Setup and tests.** Uses the same `OPENAI_API_KEY` and `OPENAI_MODEL`; no worker. `GET /api/jobs/answers` lists the user's completed CVs. `pnpm test:greenhouse` (offline URL, normalization and errors), `pnpm test:job-answers` (mocked AI), `pnpm test:step1` (eligibility, quote verification, memory, regenerate).
+
+### 3. Sending an application
+
+**Purpose.** Submit the reviewed answers and files to the employer's Greenhouse form from the user's own computer, and keep an exact record of what was sent.
+
+**How it works** (implemented)
+
+1. Review the answers and attachments, tick "I've reviewed…", and click **Apply**. `POST /api/submissions` accepts multipart data (`application` JSON ≤512 KB plus `file:<fieldId>` parts; ≤10 MB each, ≤20 MB total; pdf, doc, docx, txt, rtf).
+2. The server reuses an existing non-failed submission for the same user and URL, re-fetches the live form, and runs `validateSubmission` (required answers, option values, form unchanged, CV ownership). In one transaction it saves the immutable snapshot (`submission`), the file bytes (`submission_file`), and the approved long answers (feeding **Saved answers**). Response: `202`.
+3. The submission worker (`pnpm worker:submission`) dispatches rows into pg-boss (`retryLimit: 0`) and claims one atomically (`queued → processing`). `submitInBrowser` re-checks the live form, opens a **visible** Chromium (page navigations limited to Greenhouse hosts), fills the fields, uploads files, and clicks Submit once.
+4. The page polls every 2 s. Only a visible confirmation marks it **submitted**. The saved application, its form and its files appear under **Applications** (`/app/applications`, `/app/applications/:id`).
+
+**Example** (real `validateSubmission` on the test fixture. Browser filling and the queue are covered by `pnpm test:submission` and `pnpm test:submission-queue`; nothing was sent to an employer)
+
+```text
+valid answers + resume file   → ok
+no resume attached            → 400 Please complete: Resume.
+consent unchecked             → 400 Please complete: Consent.
+option not on the form        → 409 An option changed for Language.
+free-form option, no text     → 400 Please specify your answer for Language.
+employer changed the form     → 409 The application questions changed. Reload the job and review your answers.
+
+statuses: queued → processing → needs_input ⇄ submitting → submitted | needs_verification | failed
+```
+
+**Code map**
+
+| Step | Where |
+|---|---|
+| Apply UI and status polling | [app/components/submission.tsx](app/components/submission.tsx): `SubmissionPanel` |
+| Create and read submissions | [app/api/submissions/route.ts](app/api/submissions/route.ts) |
+| Validation against the live form | [lib/submissions/validate.ts](lib/submissions/validate.ts): `validateSubmission` |
+| Queue, claim, reconcile | [lib/submissions/processing.ts](lib/submissions/processing.ts): `dispatchSubmissions`, `processSubmission`, `reconcileSubmissions`; [workers/submission-worker.ts](workers/submission-worker.ts) |
+| Browser automation | [lib/submissions/browser.ts](lib/submissions/browser.ts): `submitInBrowser`, `fillApplication`, `finishApplication`, `isConfirmed` |
+| Types and statuses | [lib/submissions/types.ts](lib/submissions/types.ts) |
+| Saved applications | [app/app/applications/page.tsx](app/app/applications/page.tsx), [app/app/applications/[id]/page.tsx](app/app/applications/[id]/page.tsx), [lib/applications/data.ts](lib/applications/data.ts), [app/api/applications/[id]/files/[fileId]/route.ts](app/api/applications/[id]/files/[fileId]/route.ts) |
+| Remembering approved answers | [lib/answers/memory.ts](lib/answers/memory.ts): `saveApprovedAnswers` |
+
+**Edge cases and failure handling**
+
+- The employer changed the form since import: `409`, reload and review again. A missing required answer, invalid option or free-form option without text: `400`.
+- CAPTCHA, location autocomplete (`location_needs_selection`), free-form options, or any field the worker cannot fill: status **needs input**, and the browser stays open for five minutes so the user can finish and submit there. The app never solves or bypasses CAPTCHA.
+- No visible confirmation, a closed browser, a timeout or a worker crash after starting: **needs verification**. There are **no automatic retries** and no retry for uncertain or successful applications. Check the employer's confirmation email before doing anything else.
+- A failure before the browser opens (job unreachable, Chromium missing): **failed**, and Apply can be retried. Duplicate Apply requests reuse the saved submission. `reconcileSubmissions` repairs jobs lost by the queue.
+- Confirmation is detected from headings and known containers (`isConfirmed`), so an unusual confirmation page ends as **needs verification** instead of guessing.
+- Attachments are limited to 10 MB each and 20 MB total; later edits on the page never change a queued application.
+
+**Trade-offs.** The worker runs on the user's desktop, one visible browser at a time: it is not a hosted service and does not scale to many users. Approved answers are remembered when **Apply** is accepted, not when Greenhouse confirms, so a failed submission still leaves saved answers. Reloading a job restores its status but not the editable draft. No live employer submission has been part of the automated tests.
+
+**Planned** ([roadmap](docs/ROADMAP.md)): one real end-to-end submit and better location handling (Step 0), a background review queue (Step B), more ATSs and the choice between a hosted worker and a browser extension for a paid product (Step D).
+
+**Setup.** Install the browser, apply migrations, and start the visible worker, with `pnpm dev` running separately (the CV worker is only for parsing):
 
 ```bash
-pnpm test:parsing       # isolated temporary local DB, real PDF parsing, stubbed AI
-pnpm test:parsing-api   # requires localhost:3000 and the local Compose DB
-pnpm test:cv-ai         # OpenAI SDK behavior with a mocked HTTP transport
+pnpm exec playwright install chromium
+pnpm db:migrate
+pnpm worker:submission
 ```
 
-The worker test creates and drops its own temporary database. API tests create
-and remove temporary users and CVs. These tests do not measure model extraction
-accuracy; evaluate that separately against representative CVs before relying on
-unreviewed results.
+Endpoints: `POST /api/submissions`, `GET /api/submissions?url=...` (latest status for the owner). No Greenhouse credentials are needed. Verification never submits to employers: `pnpm test:submission` (local synthetic form, including PDF upload) and `pnpm test:submission-queue` (creates and drops a temporary database).
 
-### Greenhouse job import
+### Profile and saved answers
 
-After signing in, paste a direct Greenhouse job URL into **Job application** and
-click **Load job**. The app displays the description and editable application,
-location, equal opportunity, demographic, and applicable consent questions.
-File/text alternatives and single/multiple choice fields retain Greenhouse's
-options and required flags. **Check required fields** validates visible answers.
+The **Profile** page stores facts a CV can't show: where you live, citizenships, where you can work and how (employee, employee needing sponsorship, B2B contractor, EOR), pay, start date, links, projects, and EEO and consent choices. It saves automatically as you edit. Matching questions are filled from it and never guessed; anything it doesn't state stays yours to answer.
 
-This first version keeps answers and selected files in page memory only; it does
-not save or submit applications. Hidden location coordinates are retained as
-empty fields; geocoding is not implemented. Unsupported field types are visibly
-flagged for completion on the original posting. Custom company career domains
-and shortened links are not supported; use the direct Greenhouse posting URL.
-
-`GET /api/jobs/greenhouse?url=...` requires a session and reads Greenhouse's public
-Job Board API with `questions=true`. It needs no API key, migration, or worker.
-The server only requests fixed Greenhouse API hosts and rejects redirects.
-Descriptions are converted to plain text before rendering.
-
-Run `pnpm test:greenhouse` for offline URL, response normalization, and error tests.
-
-#### Generate application answers
-
-Choose a parsed CV below the job description and click **Generate answers**.
-The authenticated `POST /api/jobs/answers` endpoint loads that user's CV from the
-database, preferring saved review corrections, and calls OpenAI with the job and
-required questions. Optional cover-letter and motivation questions are included.
-It uses the same `OPENAI_API_KEY` and `OPENAI_MODEL` as CV parsing, but runs in the
-web process (up to 60 seconds for the AI request), so the worker is not required.
-
-Drafts fill empty questions only. Dropdown values are checked against the job's
-actual options. Personal decisions, consent, unsupported inputs and questions
-without enough CV information remain for the applicant to answer. Cover letters
-use a text alternative when available; file-only cover letters produce an editable
-`cover-letter.txt` file. Generation also attaches the selected CV's original PDF
-to empty resume file inputs. **Attach selected CV PDF** attaches or replaces the
-resume without calling AI. Existing uploads are preserved during generation.
-The draft holds the actual PDF File and a reference containing its saved CV ID,
-filename, and Greenhouse field name for the future Apply step. Manual file
-replacement clears that saved reference. Downloading the PDF uses the existing
-owner-checked endpoint; a future submission endpoint must check ownership again.
-Answers remain in page memory and are not submitted or persisted. Review generated
-claims and wording: structured output validation cannot guarantee factual accuracy.
-
-`GET /api/jobs/answers` lists only the current user's completed CVs. Use **Refresh
-CVs** after a new CV finishes parsing. Run `pnpm test:job-answers` for offline
-generation, field mapping and edit-preservation tests with a mocked AI transport.
+Long answers you approve when applying are kept under **Saved answers** (`/app/answers`, deletable). They're used as voice examples for cover letters and "why us" answers, and company-neutral answers are reused as they are. The Apply page shows a setup checklist until a PDF CV is read and the profile says where you work. Tests: `pnpm test:profile`, `pnpm test:step1`.
 
 ### Development server
 
@@ -222,57 +273,3 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-
-### Greenhouse submission (local MVP)
-
-Install the browser and apply migrations, then start the visible submission worker:
-
-```bash
-pnpm exec playwright install chromium
-pnpm db:migrate
-pnpm worker:submission
-```
-
-Keep `pnpm dev` running separately. The CV worker is only needed for CV parsing.
-Run one submission worker on your local desktop: it opens Chromium on that
-computer, not in the web user's browser. This version is not a remote browser
-service for deployed multi-user applications.
-
-After loading a job, review the answers and attachments, check the review box,
-and click **Apply**. The API checks the live question set, required answers,
-option values and CV ownership, then saves a snapshot plus file bytes in
-`submission` and `submission_file`. Saved CV references resolve to their original
-bytes; manually attached files and generated cover letters are saved too.
-Attachments are limited to 10 MB each and 20 MB total. Later edits on the page do
-not change a queued application.
-
-The worker dispatches rows transactionally into pg-boss and handles one at a time.
-It fills the live Greenhouse controls, uploads the attachments, and clicks Submit
-once. If the site needs CAPTCHA, location selection, a custom/free-form field, or
-other manual help, the app shows **needs input** and leaves the visible browser
-open for five minutes. Finish those fields and submit there; leave the window open
-until the worker sees confirmation. It does not solve or bypass CAPTCHA.
-
-Only a visible confirmation marks a submission as **submitted**. If the browser
-closes, times out, or the worker crashes after starting, the result becomes
-**needs verification**. Check the employer's confirmation/email before taking any
-further action. There are no automatic retries and no retry button for uncertain
-or successful applications. Duplicate Apply requests reuse the saved submission;
-a failure before opening the browser can be retried. Reloading a job restores its
-latest submission status. Inputs remain local drafts; reopening the page does not
-restore the editable answers from a queued snapshot.
-
-Endpoints: authenticated `POST /api/submissions` accepts multipart application
-JSON and files; `GET /api/submissions?url=...` returns only the owner's latest
-status. No Greenhouse API credentials are needed for the browser submission.
-
-Verification (never submits applications to employers):
-
-```bash
-pnpm test:submission       # local synthetic browser form, including PDF upload
-pnpm test:submission-queue # isolated temporary DB, mocked browser and job API
-```
-
-The second test creates and drops its own database using the configured database
-credentials. Production form variations can still require manual completion;
-there has been no live employer submission as part of these tests.
